@@ -1,169 +1,26 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <title>nhentai 圖片快速預覽（純前端）</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    :root { color-scheme: light dark; }
-    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-           margin: 0; padding: 24px; line-height: 1.6; }
-    .wrap { max-width: 900px; margin: 0 auto; }
-    h1 { margin: 0 0 12px; font-size: 24px; }
-    form { display: flex; gap: 8px; margin: 12px 0 20px; flex-wrap: wrap; }
-    input[type="text"] { flex: 1 1 200px; padding: 10px 12px; border-radius: 12px; border: 1px solid #ccc; }
-    button { padding: 10px 16px; border-radius: 12px; border: 0; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
-    button:active { transform: translateY(1px); }
-    .msg { margin: 10px 0; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-    .card { border-radius: 16px; padding: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.08); background: rgba(255,255,255,.6); }
-    .card img { width: 100%; height: auto; border-radius: 12px; display: block; }
-    .meta { font-size: 14px; opacity: .8; margin: 4px 0 0; }
-    .row { display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
-    .small { font-size: 13px; opacity: .7; }
-    .error { color: #b00020; }
-    .hint { font-size: 13px; opacity: .7; margin-top: 6px; }
-    @media (max-width: 600px) {
-      body { padding: 16px; }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python 與 JavaScript 整合示例</title>
 </head>
 <body>
-  <div class="wrap">
-    <h1>nhentai 圖片快速預覽（純前端）</h1>
-    <form id="f">
-      <input id="num" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="輸入神奇數字（例如 177013）" required />
-      <button id="go" type="submit">載入</button>
-    </form>
-    <div class="row small">
-      <span>說明：</span>
-      <span>此頁使用 <code>r.jina.ai</code> 代理抓第 1 頁 HTML，解析總頁數與圖片位址後，直接顯示所有頁面圖片。</span>
-    </div>
+    <h1>Python 與 JavaScript 整合</h1>
+    <button id="fetchButton">獲取訊息</button>
+    <p id="message"></p>
 
-    <div id="status" class="msg"></div>
-
-    <div id="result" class="card" style="display:none;">
-      <div class="row">
-        <div id="title" class="meta"></div>
-        <div id="count" class="meta"></div>
-      </div>
-      <div class="hint">向下滾動載入全部圖片（可能很多張）</div>
-      <div id="grid" class="grid" style="margin-top:10px;"></div>
-    </div>
-  </div>
-
-  <script>
-    const form = document.getElementById('f');
-    const numInput = document.getElementById('num');
-    const statusBox = document.getElementById('status');
-    const resultCard = document.getElementById('result');
-    const grid = document.getElementById('grid');
-    const titleEl = document.getElementById('title');
-    const countEl = document.getElementById('count');
-
-    function setStatus(html, isError=false) {
-      statusBox.innerHTML = html || '';
-      statusBox.className = 'msg' + (isError ? ' error' : '');
-    }
-
-    function sanitizeNum(v) {
-      return (v || '').toString().trim().replace(/\D+/g, '');
-    }
-
-    async function fetchFirstPageHTML(num) {
-      // 透過 r.jina.ai 略過前端 CORS 限制（唯讀）
-      const target = `https://nhentai.net/g/${num}/1/`;
-      const viaJina = `https://r.jina.ai/http://nhentai.net/g/${num}/1/`;
-      const res = await fetch(viaJina, { mode: 'cors' });
-      if (!res.ok) throw new Error(`取得頁面失敗（HTTP ${res.status}）`);
-      const text = await res.text();
-      if (!text || text.length < 200) throw new Error('抓到的內容異常或過短');
-      return { text, originalUrl: target };
-    }
-
-    function parseInfoFromHTML(html, pageUrl) {
-      // 用 DOMParser 解析
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-
-      // 取得總頁數（.num-pages）
-      const numPagesEl = doc.querySelector('span.num-pages');
-      if (!numPagesEl) throw new Error('找不到總頁數元素（.num-pages）');
-      const totalPages = parseInt(numPagesEl.textContent.trim(), 10);
-      if (!Number.isFinite(totalPages) || totalPages <= 0) throw new Error('總頁數解析失敗');
-
-      // 找到圖片（通常第 2 個 <img> 是頁面圖）
-      const imgs = Array.from(doc.querySelectorAll('img'));
-      if (imgs.length < 2) throw new Error('找不到圖片節點');
-      const firstImg = imgs[1];
-      let imgUrl = firstImg.getAttribute('data-src') || firstImg.getAttribute('src');
-      if (!imgUrl) throw new Error('第一張圖片 URL 解析失敗');
-
-      // 將相對路徑轉絕對
-      const absFirstImg = new URL(imgUrl, pageUrl).href;
-
-      // 拆出 base 與副檔名（/path/to/xxx/1.jpg -> base=/path/to/xxx, ext=.jpg）
-      const lastSlash = absFirstImg.lastIndexOf('/');
-      const base = absFirstImg.slice(0, lastSlash);
-      const file = absFirstImg.slice(lastSlash + 1);
-      const dot = file.lastIndexOf('.');
-      if (dot === -1) throw new Error('圖片副檔名解析失敗');
-      const ext = file.slice(dot);
-
-      // 組合所有頁面的圖片 URL
-      const pages = Array.from({ length: totalPages }, (_, i) => `${base}/${i + 1}${ext}`);
-
-      return { totalPages, coverUrl: absFirstImg, pages };
-    }
-
-    function renderResult(num, info) {
-      resultCard.style.display = '';
-      grid.innerHTML = '';
-
-      titleEl.textContent = `ID：${num}`;
-      countEl.textContent = `總頁數：${info.totalPages}`;
-      // 先放封面
-      const cover = document.createElement('div');
-      cover.className = 'card';
-      cover.innerHTML = `<img loading="lazy" src="${info.coverUrl}" alt="Cover" />
-                         <div class="meta">Cover</div>`;
-      grid.appendChild(cover);
-
-      // 再放所有頁面
-      info.pages.forEach((url, idx) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'card';
-        wrap.innerHTML = `
-          <img loading="lazy" src="${url}" alt="Page ${idx + 1}" />
-          <div class="meta">Page ${idx + 1}</div>
-        `;
-        grid.appendChild(wrap);
-      });
-    }
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const raw = numInput.value;
-      const num = sanitizeNum(raw);
-
-      if (!num) {
-        setStatus('請輸入有效的數字 ID。', true);
-        return;
-      }
-
-      setStatus('讀取中…（如遇來源限流/變更，可能載入失敗）');
-      resultCard.style.display = 'none';
-      grid.innerHTML = '';
-
-      try {
-        const { text, originalUrl } = await fetchFirstPageHTML(num);
-        const info = parseInfoFromHTML(text, originalUrl);
-        renderResult(num, info);
-        setStatus('載入完成。');
-      } catch (err) {
-        console.error(err);
-        setStatus(`載入失敗：${err.message}<br><span class="small">可能原因：來源站 CORS/反熱連/頁面結構變更/代理失效。</span>`, true);
-      }
-    });
-  </script>
+    <script>
+        document.getElementById('fetchButton').addEventListener('click', function() {
+            fetch('http://127.0.0.1:5000/api/message')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('message').textContent = data.message;
+                })
+                .catch(error => {
+                    console.error('發生錯誤:', error);
+                });
+        });
+    </script>
 </body>
 </html>
